@@ -10,7 +10,7 @@ interface Message {
 interface ChatBoxProps {
   conversation: any; // selected conversation
   userId: number;
-  onNewConversation?: (conversationId: number) => void; // 👈 callback for new convos
+  onNewConversation?: (conversationId: number) => void;
 }
 
 export default function ChatBox({ conversation, userId, onNewConversation }: ChatBoxProps) {
@@ -18,7 +18,7 @@ export default function ChatBox({ conversation, userId, onNewConversation }: Cha
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // preload messages from conversation
+  // preload messages when switching convos
   useEffect(() => {
     if (conversation) {
       setMessages(conversation.messages);
@@ -32,6 +32,7 @@ export default function ChatBox({ conversation, userId, onNewConversation }: Cha
 
     const newUserMessage: Message = { role: "user", content: message };
     setMessages((prev) => [...prev, newUserMessage]);
+    setMessage("");
     setLoading(true);
 
     try {
@@ -47,7 +48,6 @@ export default function ChatBox({ conversation, userId, onNewConversation }: Cha
 
       const data = await res.json();
 
-      // 👇 if backend created a new conversation, notify parent
       if (!conversation && data.conversation_id && onNewConversation) {
         onNewConversation(data.conversation_id);
       }
@@ -64,13 +64,13 @@ export default function ChatBox({ conversation, userId, onNewConversation }: Cha
         { role: "assistant", content: "⚠️ Error connecting to backend" },
       ]);
     } finally {
-      setMessage("");
       setLoading(false);
     }
   };
 
   return (
     <div className="flex-1 flex flex-col p-4">
+      {/* Messages */}
       <div className="flex-1 overflow-y-auto space-y-2 mb-4">
         {messages.map((m, i) => (
           <div
@@ -84,8 +84,14 @@ export default function ChatBox({ conversation, userId, onNewConversation }: Cha
             {m.content}
           </div>
         ))}
+
+        {/* 🔹 Show loader when AI is thinking */}
+        {loading && (
+          <div className="italic text-gray-400 self-start">Kai is thinking...</div>
+        )}
       </div>
 
+      {/* Input */}
       <div className="flex gap-2">
         <input
           value={message}
@@ -93,6 +99,7 @@ export default function ChatBox({ conversation, userId, onNewConversation }: Cha
           onKeyDown={(e) => e.key === "Enter" && sendMessage()}
           className="flex-1 p-2 rounded bg-gray-800 border border-gray-600 focus:outline-none"
           placeholder="Type your message..."
+          disabled={loading}
         />
         <button
           onClick={sendMessage}

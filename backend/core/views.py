@@ -5,7 +5,7 @@ from .models import Conversation, Message
 import google.generativeai as genai
 from django.conf import settings
 
-# configure Gemini
+# Configure Gemini API
 genai.configure(api_key=settings.GEMINI_API_KEY)
 
 
@@ -41,7 +41,7 @@ def chat(request):
     if not user_message:
         return Response({"error": "No message provided"}, status=400)
 
-    # fallback: auto-create default user if not provided
+    # Fallback: auto-create a default user if user_id not provided
     if not user_id:
         user, _ = User.objects.get_or_create(username="default")
     else:
@@ -64,16 +64,24 @@ def chat(request):
         )
 
     # Save user message
-    Message.objects.create(conversation=conversation, role="user", content=user_message)
+    Message.objects.create(
+        conversation=conversation,
+        role="user",
+        content=user_message
+    )
 
     try:
-        # Get AI response
+        # Get AI response from Gemini
         model = genai.GenerativeModel("gemini-2.0-flash")
         response = model.generate_content(user_message)
         ai_reply = response.text
 
-        # Save assistant message
-        Message.objects.create(conversation=conversation, role="assistant", content=ai_reply)
+        # Save assistant reply
+        Message.objects.create(
+            conversation=conversation,
+            role="assistant",
+            content=ai_reply
+        )
 
         return Response({
             "reply": ai_reply,
@@ -107,3 +115,21 @@ def get_history(request, user_id):
         })
 
     return Response(conversations)
+
+
+@api_view(["POST"])
+def sync_user(request):
+    """Create or get a Django user based on email from NextAuth"""
+    email = request.data.get("email")
+
+    if not email:
+        return Response({"error": "Email required"}, status=400)
+
+    user, created = User.objects.get_or_create(
+        username=email, defaults={"email": email}
+    )
+
+    return Response({
+        "user_id": user.id,
+        "created": created
+    })
