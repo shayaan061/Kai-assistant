@@ -1,7 +1,8 @@
 from django.urls import path
-from .views import parse_request, chat
+from .views import chat, parse_request, get_history
 
 urlpatterns = [
-    path("parse-request/", parse_request),
     path("chat/", chat),
+    path("parse-request/", parse_request),
+    path("history/<int:user_id>/", get_history),
 ]

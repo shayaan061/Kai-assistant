@@ -1,113 +1,105 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import Message from "./Message";
-import { sendChatMessage, parseRequest } from "@/lib/api";
-import useSpeech from "../../../src/hooks/useSpeech";
+import { useEffect, useState } from "react";
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+}
 
-export default function ChatBox({ sessionId }: { sessionId: string | null }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [text, setText] = useState("");
+interface ChatBoxProps {
+  conversation: any; // selected conversation
+  userId: number;
+  onNewConversation?: (conversationId: number) => void; // 👈 callback for new convos
+}
+
+export default function ChatBox({ conversation, userId, onNewConversation }: ChatBoxProps) {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [useParseEndpoint, setUseParseEndpoint] = useState(false);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  // voice hook: provides start/stop recording (web speech) + play text
-  const { listening, startListening, stopListening, speak } = useSpeech({
-    onResult: (transcript: string) => setText(transcript),
-  });
-
+  // preload messages from conversation
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 99999, behavior: "smooth" });
-  }, [messages, loading]);
+    if (conversation) {
+      setMessages(conversation.messages);
+    } else {
+      setMessages([]);
+    }
+  }, [conversation]);
 
-  const pushMessage = (m: ChatMessage) => setMessages((s) => [...s, m]);
+  const sendMessage = async () => {
+    if (!message.trim()) return;
 
-  const handleSend = async () => {
-    if (!text.trim()) return;
-    const userMsg = text.trim();
-    pushMessage({ role: "user", content: userMsg });
-    setText("");
+    const newUserMessage: Message = { role: "user", content: message };
+    setMessages((prev) => [...prev, newUserMessage]);
     setLoading(true);
 
     try {
-      if (useParseEndpoint) {
-        // structured parse endpoint
-        const parsed = await parseRequest(userMsg);
-        pushMessage({ role: "assistant", content: JSON.stringify(parsed, null, 2) });
-        await speak(`Parsed result: ${JSON.stringify(parsed)}`);
-      } else {
-        // conversational endpoint
-        const reply = await sendChatMessage(userMsg);
-        pushMessage({ role: "assistant", content: reply });
-        await speak(reply);
+      const res = await fetch("http://127.0.0.1:8000/api/chat/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: userId,
+          conversation_id: conversation?.conversation_id || null,
+          message,
+        }),
+      });
+
+      const data = await res.json();
+
+      // 👇 if backend created a new conversation, notify parent
+      if (!conversation && data.conversation_id && onNewConversation) {
+        onNewConversation(data.conversation_id);
       }
-    } catch (e: any) {
-      pushMessage({ role: "assistant", content: `Error: ${e.message || e}` });
+
+      const aiReply: Message = {
+        role: "assistant",
+        content: data.reply || "⚠️ Error: no reply",
+      };
+
+      setMessages((prev) => [...prev, aiReply]);
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "⚠️ Error connecting to backend" },
+      ]);
     } finally {
+      setMessage("");
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-700">
-        <div className="text-xl font-semibold">Aiden</div>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-gray-300">
-            <input
-              type="checkbox"
-              checked={useParseEndpoint}
-              onChange={() => setUseParseEndpoint((v) => !v)}
-            />
-            Use parse endpoint
-          </label>
-        </div>
-      </div>
-
-      {/* messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4">
+    <div className="flex-1 flex flex-col p-4">
+      <div className="flex-1 overflow-y-auto space-y-2 mb-4">
         {messages.map((m, i) => (
-          <Message key={i} role={m.role} text={m.content} />
+          <div
+            key={i}
+            className={`p-2 rounded max-w-lg ${
+              m.role === "user"
+                ? "bg-cyan-500/20 self-end text-right"
+                : "bg-gray-700/50 self-start"
+            }`}
+          >
+            {m.content}
+          </div>
         ))}
-
-        {loading && (
-          <div className="text-gray-400 italic">Aiden is thinking…</div>
-        )}
       </div>
 
-      {/* input bar */}
-      <div className="p-4 border-t border-gray-700 bg-gradient-to-t from-black/50 to-transparent flex items-center gap-3">
-        <button
-          onClick={() => (listening ? stopListening() : startListening())}
-          className={`p-3 rounded-full ${listening ? "bg-red-600" : "bg-gray-800"} `}
-          aria-label="voice"
-        >
-          {/* simple mic icon */}
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3z" stroke="white" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M19 11v1a7 7 0 01-14 0v-1" stroke="white" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M12 19v3" stroke="white" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-
+      <div className="flex gap-2">
         <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSend()}
-          placeholder="Message Aiden..."
-          className="flex-1 bg-gray-900 border border-gray-700 px-4 py-3 rounded-lg outline-none focus:ring-2 focus:ring-cyan-400"
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+          className="flex-1 p-2 rounded bg-gray-800 border border-gray-600 focus:outline-none"
+          placeholder="Type your message..."
         />
-
         <button
-          onClick={handleSend}
+          onClick={sendMessage}
           disabled={loading}
-          className="px-5 py-3 bg-cyan-500 text-black rounded-lg font-semibold hover:brightness-110"
+          className="bg-cyan-500 hover:bg-cyan-600 text-black font-semibold px-4 py-2 rounded"
         >
-          Send
+          {loading ? "..." : "Send"}
         </button>
       </div>
     </div>
