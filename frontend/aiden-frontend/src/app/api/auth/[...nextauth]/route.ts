@@ -10,25 +10,18 @@ const handler = NextAuth({
   ],
   callbacks: {
     async session({ session }) {
-      if (session?.user?.email) {
-        try {
-          const res = await fetch("http://127.0.0.1:8000/api/sync-user/", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: session.user.email }),
-          });
+      // Sync with Django backend
+      const res = await fetch("http://127.0.0.1:8000/api/sync-user/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: session.user?.email }),
+      });
 
-          if (res.ok) {
-            const data = await res.json();
-            (session as any).userId = data.user_id; // store Django user_id in session
-          }
-        } catch (err) {
-          console.error("Failed to sync user with Django:", err);
-        }
-      }
+      const data = await res.json();
+      (session as any).userId = data.user_id; // attach Django userId
       return session;
     },
   },
 });
 
-export { handler as GET, handler as POST };
+export { handler as GET, handler as POST }; 
