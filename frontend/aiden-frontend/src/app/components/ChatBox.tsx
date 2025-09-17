@@ -87,45 +87,45 @@ export default function ChatBox({ conversation, userId, onNewConversation }: Cha
   };
 
   return (
-    <div className="flex-1 flex flex-col p-4 overflow-hidden mt-5">
-      {/* Top bar inside ChatBox */}
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold">Chat</h2>
-        <button
-          onClick={startNewChat}
-          className="bg-cyan-500/90 hover:bg-cyan-600 text-black font-semibold px-3 py-1 rounded"
-        >
-          + New Chat
-        </button>
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto space-y-2 mb-4 pr-2 custom-scrollbar">
-        {messages.map((m, i) => (
-          <Message key={i} role={m.role} text={m.content} />
-        ))}
-
-        {loading && <Message role="assistant" text="Kai is thinking..." />}
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Input Bar */}
-      <div className="flex gap-2">
-        <input
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          className="flex-1 p-2 rounded bg-gray-800 border border-gray-600 focus:outline-none"
-          placeholder="Type your message..."
-        />
-        <button
-          onClick={sendMessage}
-          disabled={loading}
-          className="bg-cyan-500 hover:bg-cyan-600 text-black font-semibold px-4 py-2 rounded"
-        >
-          Send
-        </button>
-      </div>
+  <div className="flex-1 flex flex-col p-4 overflow-hidden mt-5">
+    {/* Top bar inside ChatBox */}
+    <div className="flex items-center gap-4 mb-4">
+      <h2 className="text-lg font-semibold">Chat</h2>
+      <button
+        onClick={startNewChat}
+        className="bg-cyan-500/90 hover:bg-cyan-600 text-black font-semibold px-3 py-1 rounded"
+      >
+        + New Chat
+      </button>
     </div>
-  );
+
+    {/* Messages */}
+    <div className="flex-1 overflow-y-auto space-y-2 mb-4 pr-2 custom-scrollbar">
+      {messages.map((m, i) => (
+        <Message key={i} role={m.role} text={m.content} />
+      ))}
+
+      {loading && <Message role="assistant" text="Kai is thinking..." />}
+      <div ref={bottomRef} />
+    </div>
+
+    {/* Input Bar */}
+    <div className="flex gap-2">
+      <input
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+        className="flex-1 p-2 rounded bg-gray-800 border border-gray-600 focus:outline-none"
+        placeholder="Type your message..."
+      />
+      <button
+        onClick={sendMessage}
+        disabled={loading}
+        className="bg-cyan-500 hover:bg-cyan-600 text-black font-semibold px-4 py-2 rounded"
+      >
+        Send
+      </button>
+    </div>
+  </div>
+);
 }
