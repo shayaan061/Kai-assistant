@@ -1,21 +1,24 @@
+
+
 from pathlib import Path
 import os
 from dotenv import load_dotenv
-
 load_dotenv()
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# Gemini API Key
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-_w9bvbx)du6m*rz=)90l9mlb%_o_fek=n$ha0jw&4-efld-4%6'
+SECRET_KEY = 'django-insecure-05z5jsmzn$#+$jy^$%vz_qqf7t8uf=pe6vy8ei8!vk!$&c9w-('
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -26,30 +29,30 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'rest_framework',
-    'core',
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "rest_framework",
     "corsheaders",
+    "core",  # ✅ add this
 ]
 
+
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
+    "corsheaders.middleware.CorsMiddleware",  # must be first or near top
+    "django.middleware.common.CommonMiddleware",'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    "corsheaders.middleware.CorsMiddleware",
 ]
-CORS_ALLOW_ALL_ORIGINS = True
 
-ROOT_URLCONF = 'aiden_backend.urls'
+ROOT_URLCONF = 'kai_backend.urls'
 
 TEMPLATES = [
     {
@@ -66,23 +69,21 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'aiden_backend.wsgi.application'
+WSGI_APPLICATION = 'kai_backend.wsgi.application'
 
 
-# Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+AUTH_USER_MODEL = "core.CustomUser"
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'kai_db',        
-        'USER': 'kai_user',      
-        'PASSWORD': 'admin',  
-        'HOST': 'localhost',
-        'PORT': '5432',
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": "kai_db",
+        "USER": "postgres",
+        "PASSWORD": "admin",
+        "HOST": "localhost",
+        "PORT": "5432",
     }
 }
-
 
 
 # Password validation
@@ -125,3 +126,9 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = True# for testing purpose only, remove in production
