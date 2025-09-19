@@ -11,12 +11,22 @@ export default function Home() {
 
   const [selectedConversation, setSelectedConversation] = useState<any>(null);
 
+  // ✅ handle new chat event
+  const handleNewConversation = (conversationId: number) => {
+    setSelectedConversation({
+      conversation_id: conversationId,
+      title: "New Chat",
+      messages: [],
+    });
+  };
+
   return (
     <main className="flex h-screen bg-black text-white">
       {/* Sidebar */}
       <Sidebar
         userId={userId}
         onSelectConversation={setSelectedConversation}
+        onNewConversation={handleNewConversation} 
       />
 
       {/* Chat Window */}
@@ -29,6 +39,6 @@ export default function Home() {
           </div>
         )}
       </div>
-    </main>
+    </main> 
   );
 }

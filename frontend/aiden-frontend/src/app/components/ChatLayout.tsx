@@ -56,9 +56,11 @@ export default function ChatLayout() {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <Sidebar
-          userId={userId}
-          onSelectConversation={(conv) => setActiveId(conv.conversation_id)}
-        />
+  userId={userId}
+  onSelectConversation={(conv) => setActiveId(conv.conversation_id)}
+  onNewConversation={handleNewConversation}  // ✅ new prop
+/>
+
 
         {/* Main Chat */}
         <main className="flex-1 flex flex-col overflow-hidden">

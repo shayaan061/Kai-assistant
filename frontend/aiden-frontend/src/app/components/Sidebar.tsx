@@ -18,16 +18,20 @@ interface Conversation {
 export default function Sidebar({
   userId,
   onSelectConversation,
+  onNewConversation, // ✅ added
 }: {
   userId: string | null;
   onSelectConversation: (conv: Conversation) => void;
+  onNewConversation: (conversationId: number) => void; // ✅ added
 }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const { data: session } = useSession();
 
+  // Fetch history
   useEffect(() => {
     async function fetchHistory() {
+      if (!userId) return;
       try {
         const res = await fetch(
           `http://127.0.0.1:8000/api/history/${userId}/`
@@ -38,15 +42,50 @@ export default function Sidebar({
         console.error("Error fetching history:", err);
       }
     }
-    if (userId) fetchHistory();
+    fetchHistory();
   }, [userId]);
+
+  // Start a new conversation
+  const handleNewChat = async () => {
+    if (!userId) return;
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/chat/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: userId,
+          message: " ", // 👈 send empty/placeholder message
+        }),
+      });
+      const data = await res.json();
+
+      // ✅ refresh conversations
+      setConversations((prev) => [
+        { conversation_id: data.conversation_id, title: "New Chat", messages: [] },
+        ...prev,
+      ]);
+
+      // ✅ notify parent
+      onNewConversation(data.conversation_id);
+    } catch (err) {
+      console.error("Error creating new chat:", err);
+    }
+  };
 
   return (
     <aside className="w-64 bg-gray-900 text-white border-r border-gray-700 flex flex-col">
       {/* Header */}
-      <h2 className="p-4 text-lg font-bold border-b border-gray-700">
-        Conversations
-      </h2>
+      <div className="p-4 flex justify-between items-center border-b border-gray-700">
+        <h2 className="text-lg font-bold">Conversations</h2>
+        {session && (
+          <button
+            onClick={handleNewChat}
+            className="bg-cyan-500 px-2 py-1 text-sm font-semibold text-black rounded hover:bg-cyan-600"
+          >
+            + New
+          </button>
+        )}
+      </div>
 
       {/* Conversation List */}
       <div className="flex-1 overflow-y-auto">
@@ -65,7 +104,7 @@ export default function Sidebar({
         )}
       </div>
 
-      {/* User Section at Bottom */}
+      {/* User Section */}
       <div className="relative border-t border-gray-700">
         {!session ? (
           <button
