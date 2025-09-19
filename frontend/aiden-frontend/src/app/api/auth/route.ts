@@ -10,7 +10,7 @@ const handler = NextAuth({
   ],
   callbacks: {
     async session({ session }) {
-      // Fetch user from Django backend and sync
+      // Sync with Django backend
       const res = await fetch("http://127.0.0.1:8000/api/sync-user/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -18,7 +18,7 @@ const handler = NextAuth({
       });
 
       const data = await res.json();
-      (session as any).user.id = data.user_id; // ✅ attach Django userId
+      (session as any).userId = data.user_id;
       return session;
     },
   },

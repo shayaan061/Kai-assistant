@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import ChatBox from "./ChatBox";
-import AuthButton from "./AuthButton";
+import Sidebar from "./Sidebar";
 
 interface Message {
   role: string;
@@ -19,7 +19,7 @@ interface Conversation {
 
 export default function ChatLayout() {
   const { data: session } = useSession();
-  const userId = (session as any)?.userId || null;
+  const userId: string | null = session?.user?.id || null; // ✅ now string
 
   const [convos, setConvos] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -53,46 +53,26 @@ export default function ChatLayout() {
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-gray-900 via-black to-gray-800 text-white overflow-hidden">
-      {/* Top bar */}
-      <header className="p-4 flex justify-end border-b border-gray-700 bg-black">
-        <AuthButton />
-      </header>
-
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <aside className="w-72 border-r border-gray-700 p-4 hidden md:flex flex-col gap-4">
-          <button
-            onClick={() => setActiveId(null)}
-            className="bg-cyan-500/90 hover:bg-cyan-600 text-black font-semibold py-2 rounded"
-          >
-            + New chat
-          </button>
-
-          <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-1">
-            {convos.length === 0 && (
-              <div className="text-gray-400">No conversations yet — start a new chat</div>
-            )}
-            {convos.map((c) => (
-              <div
-                key={c.conversation_id}
-                onClick={() => setActiveId(c.conversation_id)}
-                className={`p-2 rounded cursor-pointer ${
-                  c.conversation_id === activeId ? "bg-gray-700" : "hover:bg-gray-800"
-                }`}
-              >
-                {c.title}
-              </div>
-            ))}
-          </div>
-        </aside>
+        <Sidebar
+          userId={userId}
+          onSelectConversation={(conv) => setActiveId(conv.conversation_id)}
+        />
 
         {/* Main Chat */}
         <main className="flex-1 flex flex-col overflow-hidden">
-          <ChatBox
-            conversation={selectedConversation}
-            userId={userId}
-            onNewConversation={handleNewConversation}
-          />
+          {userId ? (
+            <ChatBox
+              conversation={selectedConversation}
+              userId={userId} // ✅ now string
+              onNewConversation={handleNewConversation}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full text-gray-400">
+              Please log in to start chatting
+            </div>
+          )}
         </main>
       </div>
     </div>

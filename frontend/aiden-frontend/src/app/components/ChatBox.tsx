@@ -10,7 +10,7 @@ interface MessageType {
 
 interface ChatBoxProps {
   conversation: any;
-  userId: number;
+  userId: string;
   onNewConversation?: (conversationId: number) => void;
 }
 
@@ -21,7 +21,6 @@ export default function ChatBox({ conversation, userId, onNewConversation }: Cha
   const [currentConversationId, setCurrentConversationId] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Load conversation messages
   useEffect(() => {
     if (conversation) {
       setMessages(conversation.messages);
@@ -37,7 +36,7 @@ export default function ChatBox({ conversation, userId, onNewConversation }: Cha
   }, [messages, loading]);
 
   const sendMessage = async () => {
-    if (!message.trim()) return;
+    if (!message.trim() || !userId) return;
 
     const newUserMessage: MessageType = { role: "user", content: message };
     setMessages((prev) => [...prev, newUserMessage]);
@@ -57,75 +56,48 @@ export default function ChatBox({ conversation, userId, onNewConversation }: Cha
 
       const data = await res.json();
 
-      // ✅ If new conversation created, update ID
       if (!currentConversationId && data.conversation_id) {
         setCurrentConversationId(data.conversation_id);
         if (onNewConversation) onNewConversation(data.conversation_id);
       }
 
-      const aiReply: MessageType = {
-        role: "assistant",
-        content: data.reply || "⚠️ Error: no reply",
-      };
-
+      const aiReply: MessageType = { role: "assistant", content: data.reply || "⚠️ Error" };
       setMessages((prev) => [...prev, aiReply]);
-    } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "⚠️ Error connecting to backend" },
-      ]);
+    } catch {
+      setMessages((prev) => [...prev, { role: "assistant", content: "⚠️ Backend error" }]);
     } finally {
       setLoading(false);
     }
   };
 
-  // ✅ Start a new chat (clear state + reset conversationId)
-  const startNewChat = () => {
-    setMessages([]);
-    setCurrentConversationId(null);
-    if (onNewConversation) onNewConversation(-1); // signal parent if needed
-  };
-
   return (
-  <div className="flex-1 flex flex-col p-4 overflow-hidden mt-5">
-    {/* Top bar inside ChatBox */}
-    <div className="flex items-center gap-4 mb-4">
-      <h2 className="text-lg font-semibold">Chat</h2>
-      <button
-        onClick={startNewChat}
-        className="bg-cyan-500/90 hover:bg-cyan-600 text-black font-semibold px-3 py-1 rounded"
-      >
-        + New Chat
-      </button>
-    </div>
+    <div className="flex-1 flex flex-col p-4 overflow-hidden">
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto space-y-2 mb-4 pr-2 custom-scrollbar">
+        {messages.map((m, i) => (
+          <Message key={i} role={m.role} text={m.content} />
+        ))}
+        {loading && <Message role="assistant" text="Kai is thinking..." />}
+        <div ref={bottomRef} />
+      </div>
 
-    {/* Messages */}
-    <div className="flex-1 overflow-y-auto space-y-2 mb-4 pr-2 custom-scrollbar">
-      {messages.map((m, i) => (
-        <Message key={i} role={m.role} text={m.content} />
-      ))}
-
-      {loading && <Message role="assistant" text="Kai is thinking..." />}
-      <div ref={bottomRef} />
+      {/* Input */}
+      <div className="flex gap-2">
+        <input
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+          className="flex-1 p-2 rounded bg-gray-800 border border-gray-600 focus:outline-none"
+          placeholder="Type your message..."
+        />
+        <button
+          onClick={sendMessage}
+          disabled={loading}
+          className="bg-cyan-500 hover:bg-cyan-600 text-black px-4 py-2 rounded"
+        >
+          Send
+        </button>
+      </div>
     </div>
-
-    {/* Input Bar */}
-    <div className="flex gap-2">
-      <input
-        value={message}
-        onChange={(e) => setMessage(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-        className="flex-1 p-2 rounded bg-gray-800 border border-gray-600 focus:outline-none"
-        placeholder="Type your message..."
-      />
-      <button
-        onClick={sendMessage}
-        disabled={loading}
-        className="bg-cyan-500 hover:bg-cyan-600 text-black font-semibold px-4 py-2 rounded"
-      >
-        Send
-      </button>
-    </div>
-  </div>
-);
+  );
 }

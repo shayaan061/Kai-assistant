@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { signOut, useSession } from "next-auth/react";
+import { signIn, signOut, useSession } from "next-auth/react";
 
 interface Message {
   role: string;
@@ -19,7 +19,7 @@ export default function Sidebar({
   userId,
   onSelectConversation,
 }: {
-  userId: number;
+  userId: string | null;
   onSelectConversation: (conv: Conversation) => void;
 }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -66,34 +66,43 @@ export default function Sidebar({
       </div>
 
       {/* User Section at Bottom */}
-      {session && (
-        <div className="relative border-t border-gray-700">
+      <div className="relative border-t border-gray-700">
+        {!session ? (
           <button
-            onClick={() => setMenuOpen((prev) => !prev)}
-            className="w-full text-left px-4 py-3 hover:bg-gray-800 flex justify-between items-center"
+            onClick={() => signIn("google")}
+            className="w-full px-4 py-3 text-center bg-cyan-500 text-black font-semibold hover:bg-cyan-600"
           >
-            <span>{session.user?.name || session.user?.email}</span>
-            <span className="text-gray-400">▼</span>
+            Login
           </button>
+        ) : (
+          <>
+            <button
+              onClick={() => setMenuOpen((prev) => !prev)}
+              className="w-full text-left px-4 py-3 hover:bg-gray-800 flex justify-between items-center"
+            >
+              <span>{session.user?.name || session.user?.email}</span>
+              <span className="text-gray-400">▼</span>
+            </button>
 
-          {menuOpen && (
-            <div className="absolute bottom-12 left-0 w-full bg-gray-800 border border-gray-700 rounded shadow-lg">
-              <button className="block w-full text-left px-4 py-2 hover:bg-gray-700">
-                Settings
-              </button>
-              <button className="block w-full text-left px-4 py-2 hover:bg-gray-700">
-                Help Center
-              </button>
-              <button
-                onClick={() => signOut()}
-                className="block w-full text-left px-4 py-2 text-red-400 hover:bg-gray-700"
-              >
-                Logout
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+            {menuOpen && (
+              <div className="absolute bottom-12 left-0 w-full bg-gray-800 border border-gray-700 rounded shadow-lg">
+                <button className="block w-full text-left px-4 py-2 hover:bg-gray-700">
+                  Settings
+                </button>
+                <button className="block w-full text-left px-4 py-2 hover:bg-gray-700">
+                  Help Center
+                </button>
+                <button
+                  onClick={() => signOut()}
+                  className="block w-full text-left px-4 py-2 text-red-400 hover:bg-gray-700"
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </aside>
   );
 }

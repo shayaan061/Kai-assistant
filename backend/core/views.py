@@ -1,77 +1,95 @@
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
+import json
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from .models import CustomUser, Conversation, Message
-import google.generativeai as genai
 
-# Configure Gemini
+import google.generativeai as genai
 genai.configure(api_key=settings.GEMINI_API_KEY)
 
-
-@api_view(["POST"])
+# ✅ Sync user (called from NextAuth session callback)
+@csrf_exempt
 def sync_user(request):
-    """Ensure user exists (used by NextAuth)"""
-    email = request.data.get("email")
-    if not email:
-        return Response({"error": "Email required"}, status=400)
+    if request.method == "POST":
+        body = json.loads(request.body)
+        email = body.get("email")
 
-    user, created = CustomUser.objects.get_or_create(email=email, defaults={"username": email, "is_google_account": True})
-    return Response({"user_id": user.id})
+        if not email:
+            return JsonResponse({"error": "Email required"}, status=400)
+
+        user, created = CustomUser.objects.get_or_create(
+            email=email,
+            defaults={"username": email.split("@")[0], "is_google_account": True},
+        )
+        return JsonResponse({"user_id": user.id})
+
+    return JsonResponse({"error": "Invalid method"}, status=405)
 
 
-@api_view(["POST"])
+# ✅ Chat endpoint
+@csrf_exempt
 def chat(request):
-    """Chat with AI and save messages"""
-    user_id = request.data.get("user_id")
-    message = request.data.get("message")
-    conversation_id = request.data.get("conversation_id")
+    if request.method == "POST":
+        data = json.loads(request.body)
+        user_id = data.get("user_id")
+        conv_id = data.get("conversation_id")
+        message = data.get("message")
 
-    if not message:
-        return Response({"error": "Message required"}, status=400)
-
-    try:
-        user = CustomUser.objects.get(id=user_id)
-    except CustomUser.DoesNotExist:
-        return Response({"error": "User not found"}, status=404)
-
-    if conversation_id:
         try:
-            conversation = Conversation.objects.get(id=conversation_id, user=user)
-        except Conversation.DoesNotExist:
-            return Response({"error": "Conversation not found"}, status=404)
-    else:
-        conversation = Conversation.objects.create(user=user, title=message[:30])
+            user = CustomUser.objects.get(id=user_id)
+        except CustomUser.DoesNotExist:
+            return JsonResponse({"error": "User not found"}, status=404)
 
-    # Save user message
-    Message.objects.create(conversation=conversation, role="user", content=message)
+        if conv_id:
+            conversation = Conversation.objects.get(id=conv_id, user=user)
+        else:
+            conversation = Conversation.objects.create(user=user, title="New Chat")
 
-    try:
-        model = genai.GenerativeModel("gemini-2.0-flash")
-        ai_response = model.generate_content(message).text
-    except Exception as e:
-        ai_response = f"⚠️ Gemini error: {str(e)}"
+        # Save user message
+        user_message = Message.objects.create(
+            conversation=conversation, role="user", content=message
+        )
 
-    Message.objects.create(conversation=conversation, role="assistant", content=ai_response)
+        # ✅ Update conversation title if it's still "New Chat"
+        if conversation.title == "New Chat":
+            conversation.title = message[:30]  # limit title length
+            conversation.save()
 
-    return Response({"reply": ai_response, "conversation_id": conversation.id})
+        # Send to Gemini
+        try:
+            model = genai.GenerativeModel("gemini-2.0-flash")
+            response = model.generate_content(message)
+            reply_text = response.text or "⚠ No response from Kai"
+        except Exception as e:
+            reply_text = f"⚠ Error: {str(e)}"
+
+        # Save assistant reply
+        Message.objects.create(conversation=conversation, role="assistant", content=reply_text)
+
+        return JsonResponse({
+            "conversation_id": conversation.id,
+            "reply": reply_text
+        })
+
+    return JsonResponse({"error": "Invalid method"}, status=405)
 
 
-@api_view(["GET"])
+# ✅ Get chat history
 def get_history(request, user_id):
-    """Get all conversations + messages for a user"""
     try:
         user = CustomUser.objects.get(id=user_id)
     except CustomUser.DoesNotExist:
-        return Response({"error": "User not found"}, status=404)
+        return JsonResponse({"error": "User not found"}, status=404)
 
     conversations = []
-    for convo in user.conversations.all().order_by("-created_at"):
+    for conv in user.conversations.all().order_by("-created_at"):
         conversations.append({
-            "conversation_id": convo.id,
-            "title": convo.title,
+            "conversation_id": conv.id,
+            "title": conv.title,
             "messages": [
-                {"role": m.role, "content": m.content, "timestamp": m.timestamp.isoformat()}
-                for m in convo.messages.all().order_by("timestamp")
+                {"role": msg.role, "content": msg.content, "timestamp": msg.timestamp}
+                for msg in conv.messages.all().order_by("timestamp")
             ],
         })
-    return Response(conversations)
+
+    return JsonResponse(conversations, safe=False)
