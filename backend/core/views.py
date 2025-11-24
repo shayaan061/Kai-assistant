@@ -1,19 +1,29 @@
 import json
-import os
-import requests
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from .models import CustomUser, Conversation, Message
 
-# Gemini
 import google.generativeai as genai
 genai.configure(api_key=settings.GEMINI_API_KEY)
 
+from twilio.rest import Client
 
-# ---------------------------------------------------------
-# 🔵 SYNC USER (NextAuth → Django user creation)
-# ---------------------------------------------------------
+
+# -------------------------------------------------------------------
+# 0️⃣ TEST WEBHOOK (for Cloudflare, ngrok, etc.)
+# -------------------------------------------------------------------
+@csrf_exempt
+def test_webhook(request):
+    print("\n🔥 TEST WEBHOOK HIT!")
+    print("Headers:", dict(request.headers))
+    print("Body:", request.body.decode())
+    return JsonResponse({"status": "ok"})
+
+
+# -------------------------------------------------------------------
+# 1️⃣ SYNC USER
+# -------------------------------------------------------------------
 @csrf_exempt
 def sync_user(request):
     if request.method != "POST":
@@ -25,7 +35,7 @@ def sync_user(request):
     if not email:
         return JsonResponse({"error": "Email required"}, status=400)
 
-    user, created = CustomUser.objects.get_or_create(
+    user, _ = CustomUser.objects.get_or_create(
         email=email,
         defaults={
             "username": email.split("@")[0],
@@ -36,61 +46,59 @@ def sync_user(request):
     return JsonResponse({"user_id": user.id})
 
 
-# ---------------------------------------------------------
-# 🔵 START CALL (ElevenLabs AI calling)
-# ---------------------------------------------------------
+# -------------------------------------------------------------------
+# 2️⃣ START CALL — Twilio → ElevenLabs Voice Agent
+# -------------------------------------------------------------------
 @csrf_exempt
 def start_call(request):
     if request.method != "POST":
         return JsonResponse({"error": "Invalid method"}, status=405)
 
-    ELEVEN_API_KEY = os.getenv("ELEVENLABS_API_KEY")
-    ELEVEN_AGENT_ID = os.getenv("ELEVEN_AGENT_ID")
-    ELEVEN_FROM_NUMBER = os.getenv("ELEVEN_FROM_NUMBER")
+    data = json.loads(request.body)
+    name = data.get("name")
+    phone = data.get("phone")
 
-    if not ELEVEN_API_KEY or not ELEVEN_AGENT_ID or not ELEVEN_FROM_NUMBER:
-        return JsonResponse(
-            {"error": "Missing ElevenLabs configuration"},
-            status=500
+    if not phone:
+        return JsonResponse({"error": "Phone number required"}, status=400)
+
+    # Clean number
+    phone = phone.replace(" ", "")
+    if phone.isnumeric() and not phone.startswith("+"):
+        phone = "+91" + phone
+
+    print("📞 OUTBOUND CALL REQUEST →", name or phone)
+
+    try:
+        client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+
+        # ELEVENLABS TWIML BRIDGE
+        twiml_url = (
+            "https://api.elevenlabs.io/v1/convai/twilio/"
+            + settings.ELEVEN_AGENT_ID
         )
 
-    try:
-        data = json.loads(request.body)
-        to_number = data.get("phone")
-        name = data.get("name", "")
-    except:
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
+        call = client.calls.create(
+            to=phone,
+            from_=settings.TWILIO_PHONE_NUMBER,
+            url=twiml_url,
+        )
 
-    if not to_number:
-        return JsonResponse({"error": "Missing phone number"}, status=400)
+        print("📞 CALL STARTED — SID:", call.sid)
 
-    # ElevenLabs API endpoint
-    url = f"https://api.elevenlabs.io/v1/agents/{ELEVEN_AGENT_ID}/call"
+        return JsonResponse({
+            "status": "calling",
+            "phone": phone,
+            "sid": call.sid,
+        })
 
-    payload = {
-        "phone_number": to_number,
-        "from_number": ELEVEN_FROM_NUMBER,
-    }
-
-    headers = {
-        "xi-api-key": ELEVEN_API_KEY,
-        "Content-Type": "application/json",
-    }
-
-    try:
-        response = requests.post(url, headers=headers, json=payload)
     except Exception as e:
+        print("❌ CALL ERROR:", e)
         return JsonResponse({"error": str(e)}, status=500)
 
-    try:
-        return JsonResponse(response.json(), status=response.status_code)
-    except:
-        return JsonResponse({"error": "ElevenLabs API returned invalid response"}, status=500)
 
-
-# ---------------------------------------------------------
-# 🔵 CHAT ENDPOINT (Gemini AI)
-# ---------------------------------------------------------
+# -------------------------------------------------------------------
+# 3️⃣ CHAT (Gemini)
+# -------------------------------------------------------------------
 @csrf_exempt
 def chat(request):
     if request.method != "POST":
@@ -104,67 +112,57 @@ def chat(request):
     if not message:
         return JsonResponse({"error": "Message required"}, status=400)
 
-    # Fetch user
     try:
         user = CustomUser.objects.get(id=user_id)
     except CustomUser.DoesNotExist:
         return JsonResponse({"error": "User not found"}, status=404)
 
-    # Fetch or create conversation
     if conv_id:
-        try:
-            conversation = Conversation.objects.get(id=conv_id, user=user)
-        except Conversation.DoesNotExist:
+        conversation = Conversation.objects.filter(id=conv_id, user=user).first()
+        if not conversation:
             return JsonResponse({"error": "Conversation not found"}, status=404)
     else:
         conversation = Conversation.objects.create(user=user, title="New Chat")
 
-    # Save user's message
-    Message.objects.create(
-        conversation=conversation,
-        role="user",
-        content=message
-    )
+    # Save user message
+    Message.objects.create(conversation=conversation, role="user", content=message)
 
-    # Update title on first message
-    if conversation.title == "New Chat" and message.strip():
+    # Update conversation title automatically
+    if conversation.title == "New Chat":
         conversation.title = message[:50]
         conversation.save()
 
-    # Gemini response
+    # AI response
     try:
         model = genai.GenerativeModel("gemini-2.0-flash")
         response = model.generate_content(message)
-        reply_text = response.text or "⚠️ No response from Kai"
+        reply_text = response.text or "I could not generate a response."
     except Exception as e:
         reply_text = f"⚠️ Error: {str(e)}"
 
-    # Save assistant reply
-    Message.objects.create(
-        conversation=conversation,
-        role="assistant",
-        content=reply_text
-    )
+    # Save assistant message
+    Message.objects.create(conversation=conversation, role="assistant", content=reply_text)
 
     return JsonResponse({
         "conversation_id": conversation.id,
-        "reply": reply_text,
         "title": conversation.title,
+        "reply": reply_text,
     })
 
 
-# ---------------------------------------------------------
-# 🔵 HISTORY ENDPOINT
-# ---------------------------------------------------------
+# -------------------------------------------------------------------
+# 4️⃣ GET CONVERSATION HISTORY
+# -------------------------------------------------------------------
 def get_history(request, user_id):
     try:
         user = CustomUser.objects.get(id=user_id)
     except CustomUser.DoesNotExist:
         return JsonResponse({"error": "User not found"}, status=404)
 
-    conversations = []
+    output = []
+
     for conv in user.conversations.all().order_by("-created_at"):
-        conversations.append({
+        output.append({
             "conversation_id": conv.id,
             "title": conv.title,
             "messages": [
@@ -174,7 +172,53 @@ def get_history(request, user_id):
                     "timestamp": msg.timestamp,
                 }
                 for msg in conv.messages.all().order_by("timestamp")
-            ],
+            ]
         })
 
-    return JsonResponse(conversations, safe=False)
+    return JsonResponse(output, safe=False)
+
+
+# -------------------------------------------------------------------
+# 5️⃣ ELEVENLABS → YOUR BACKEND WEBHOOK
+# -------------------------------------------------------------------
+@csrf_exempt
+def elevenlabs_webhook(request):
+    try:
+        body_raw = request.body.decode()
+        print("\n🔔 ELEVENLABS WEBHOOK HIT")
+        print("RAW BODY:", body_raw)
+
+        body = json.loads(body_raw)
+        event = body.get("type")
+        data = body.get("data", {})
+
+        print("📩 Event:", event)
+
+        # When caller speaks
+        if event == "transcription.completed":
+            user_text = data.get("transcript", "")
+            print("👤 Caller:", user_text)
+
+            model = genai.GenerativeModel("gemini-2.0-flash")
+            reply = model.generate_content(user_text).text or "I didn't understand that."
+
+            print("🤖 Reply:", reply)
+
+            return JsonResponse({
+                "messages": [
+                    {
+                        "type": "output_text",
+                        "text": reply
+                    }
+                ]
+            })
+
+        # Ping events
+        if event == "ping":
+            return JsonResponse({"pong": True})
+
+        return JsonResponse({"status": "ok"})
+
+    except Exception as e:
+        print("❌ WEBHOOK ERROR:", e)
+        return JsonResponse({"error": str(e)}, status=500)

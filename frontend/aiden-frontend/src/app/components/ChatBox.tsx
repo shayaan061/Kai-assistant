@@ -50,34 +50,32 @@ export default function ChatBox({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  // 🔥 Search Google Contacts
-  async function searchContact(name: string) {
-    try {
-      const res = await fetch("/api/contacts");
-      const data = await res.json();
-
-      for (const person of data.connections || []) {
-        const personName = person.names?.[0]?.displayName || "";
-        const phone = person.phoneNumbers?.[0]?.value || "";
-
-        if (personName.toLowerCase().includes(name.toLowerCase())) {
-          return { name: personName, phone };
-        }
-      }
-
-      return null;
-    } catch (err) {
-      console.error("Contact search failed:", err);
-      return null;
-    }
-  }
-
-  // Helper: Add AI message
+  // Format assistant reply
   function sendAIResponse(text: string) {
     setMessages((prev) => [...prev, { role: "assistant", content: text }]);
   }
 
-  // 🔥 Check if user is scheduling an event
+  // Detect "Call <number> and ask ..." pattern
+  function detectCallWithMessage(text: string) {
+    const callRegex = /call\s+(\d{7,15})(.*)/i;
+    const match = text.match(callRegex);
+
+    if (!match) return null;
+
+    return {
+      phone: match[1],
+      message: match[2]?.trim() || null,
+    };
+  }
+
+  // Normal call: "call 9136182311"
+  function detectSimpleCall(text: string) {
+    const callRegex = /call\s+(\d{7,15})/i;
+    const match = text.match(callRegex);
+    return match ? match[1] : null;
+  }
+
+  // Detect calendar scheduling
   function extractCalendarIntent(text: string) {
     if (!text.toLowerCase().includes("schedule")) return null;
 
@@ -85,16 +83,12 @@ export default function ChatBox({
     if (!parsed.length) return null;
 
     const start = parsed[0].start?.date();
-    const end = new Date(start.getTime() + 60 * 60 * 1000); // default 1-hour event
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
 
-    return {
-      summary: text,
-      start,
-      end,
-    };
+    return { summary: text, start, end };
   }
 
-  // MAIN handler
+  // MAIN HANDLER
   const sendMessage = async () => {
     if (!message.trim() || !userId) return;
 
@@ -103,48 +97,71 @@ export default function ChatBox({
     setMessage("");
     setLoading(true);
 
-    // 🔥 Calendar scheduling
-    const calendarIntent = extractCalendarIntent(userMessage);
-    if (calendarIntent) {
-      const { summary, start, end } = calendarIntent;
-
-      const res = await fetch("/api/calendar/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          summary,
-          start: start.toISOString(),
-          end: end.toISOString(),
-        }),
-      });
-
-      const data = await res.json();
-
-      setLoading(false);
-      return sendAIResponse(`📅 Event created: ${data.summary || "Scheduled!"}`);
-    }
-
-    // 🔥 Calling flow
-    if (userMessage.toLowerCase().startsWith("call ")) {
-      const name = userMessage.replace("call ", "").trim();
-      const contact = await searchContact(name);
-
-      if (!contact) {
-        setLoading(false);
-        return sendAIResponse("I couldn't find that contact.");
-      }
+    // ----------------------------------------
+    // 🔥 Case 1: Call with message
+    // "Call 9136182311 and ask him to join meeting"
+    // ----------------------------------------
+    const callIntent = detectCallWithMessage(userMessage);
+    if (callIntent) {
+      const { phone, message: askMessage } = callIntent;
 
       await fetch("http://127.0.0.1:8000/api/start-call/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(contact),
+        body: JSON.stringify({
+          phone,
+          name: askMessage ? askMessage : phone,
+        }),
       });
 
+      sendAIResponse(`📞 Calling ${phone} and saying: "${askMessage}"`);
       setLoading(false);
-      return sendAIResponse(`📞 Calling ${contact.name} at ${contact.phone}...`);
+      return;
     }
 
-    // 🔥 Normal chat
+    // ----------------------------------------
+    // 🔥 Case 2: Simple Call → "call 9136182311"
+    // ----------------------------------------
+    const simpleCall = detectSimpleCall(userMessage);
+    if (simpleCall) {
+      await fetch("http://127.0.0.1:8000/api/start-call/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: simpleCall,
+          name: simpleCall,
+        }),
+      });
+
+      sendAIResponse(`📞 Calling ${simpleCall}...`);
+      setLoading(false);
+      return;
+    }
+
+    // ----------------------------------------
+    // 🔥 Case 3: Schedule event
+    // ----------------------------------------
+    const calendarIntent = extractCalendarIntent(userMessage);
+    if (calendarIntent) {
+      const res = await fetch("/api/calendar/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          summary: calendarIntent.summary,
+          start: calendarIntent.start.toISOString(),
+          end: calendarIntent.end.toISOString(),
+        }),
+      });
+
+      const data = await res.json();
+      sendAIResponse(`📅 Event created: ${data.summary}`);
+      setLoading(false);
+      return;
+    }
+
+    // ----------------------------------------
+    // 🔥 Case 4: Normal ChatGPT message
+    // ----------------------------------------
     try {
       const res = await fetch("http://127.0.0.1:8000/api/chat/", {
         method: "POST",
@@ -163,18 +180,12 @@ export default function ChatBox({
         onNewConversation?.(data.conversation_id);
       }
 
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: data.reply },
-      ]);
+      sendAIResponse(data.reply);
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "⚠️ Backend error" },
-      ]);
-    } finally {
-      setLoading(false);
+      sendAIResponse("⚠️ Backend error");
     }
+
+    setLoading(false);
   };
 
   return (

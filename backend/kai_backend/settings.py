@@ -6,6 +6,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
+
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
+ELEVEN_AGENT_ID = os.getenv("ELEVEN_AGENT_ID")
+ELEVEN_FROM_NUMBER = os.getenv("ELEVEN_FROM_NUMBER")
+
+
 # Gemini API Key
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
@@ -23,7 +32,11 @@ SECRET_KEY = 'django-insecure-05z5jsmzn$#+$jy^$%vz_qqf7t8uf=pe6vy8ei8!vk!$&c9w-(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    "localhost",
+    "127.0.0.1",
+    "viewpicture-operation-idol-bailey.trycloudflare.com",
+]
 
 
 # Application definition
